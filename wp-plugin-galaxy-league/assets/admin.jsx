@@ -2,9 +2,18 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
 const api = async (path, opt = {}) => {
-  const res = await fetch(GLR.rest + path, {
+  const nonce =
+    (typeof GLR !== 'undefined' && GLR?.nonce) ||
+    (typeof wpApiSettings !== 'undefined' && wpApiSettings?.nonce) ||
+    ''
+  const base =
+    (typeof GLR !== 'undefined' && GLR?.rest) ||
+    (typeof wpApiSettings !== 'undefined' && wpApiSettings?.root?.replace(/\/$/, '') + '/glr/v1/') ||
+    '/wp-json/glr/v1/'
+
+  const res = await fetch(`${base}${path}`, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
+    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
     ...opt
   })
   const text = await res.text()
@@ -108,8 +117,22 @@ function ScoresApp(){
     }).catch(err=>alert(err.message))
   },[fixtureId,fixtures])
 
-  const updateScratch=(g,side,slot,val)=>setLines(prev=>prev.map(L=>L.game_number===g&&L.team_side===side&&L.player_slot===slot?{...L,scratch:Number(val||0)}:L))
-  const toggleBlind=(side,slot,checked)=>setLines(prev=>prev.map(L=>L.team_side===side&&L.player_slot===slot?{...L,is_blind:checked?1:0}:L))
+  useEffect(()=>{
+    setLines(prev =>
+      prev.map(line => {
+        if (absent.left && line.team_side === 'left') {
+          return { ...line, is_blind: 1, scratch: 0 }
+        }
+        if (absent.right && line.team_side === 'right') {
+          return { ...line, is_blind: 1, scratch: 0 }
+        }
+        return line
+      })
+    )
+  },[absent.left, absent.right])
+
+const updateScratch=(g,side,slot,val)=>setLines(prev=>prev.map(L=>L.game_number===g&&L.team_side===side&&L.player_slot===slot?{...L,scratch:val}:L))
+const toggleBlind=(side,slot,checked)=>setLines(prev=>prev.map(L=>L.team_side===side&&L.player_slot===slot?{...L,is_blind:checked?1:0}:L))
 
   const saveAbsence=async()=>{
     try{
@@ -121,6 +144,10 @@ function ScoresApp(){
   }
 
   const submit=async()=>{
+    if (!lines.length) {
+      alert('Συμπλήρωσε σκορ ή δήλωσε απουσία.')
+      return
+    }
     const payload={fixture_id:Number(fixtureId),match_day_id:Number(participants.match_day_id),lines}
     try{
       const j=await api('submit-scores',{method:'POST',body:JSON.stringify(payload)})
@@ -173,14 +200,34 @@ function ScoresApp(){
                 <tbody>
                   {[1,2,3].map(slot=>{
                     const row=participants.rows.find(r=>r.team_side===side && r.slot===slot)
+                  const disabled = (side==='left' && absent.left) || (side==='right' && absent.right)
+                  const blindChecked = lines.some(x => x.team_side===side && x.player_slot===slot && x.is_blind===1)
                     return (
                       <tr key={slot}>
                         <td style={td}>{slot}</td>
                         <td style={td}>{row?.full_name||'-'}</td>
-                        <td style={td}><input type='checkbox' onChange={e=>toggleBlind(side,slot,e.target.checked)} /></td>
+                      <td style={td}>
+                        <input
+                          type='checkbox'
+                          checked={blindChecked}
+                          disabled={disabled}
+                          onChange={e=>toggleBlind(side,slot,e.target.checked)}
+                        />
+                      </td>
                         {[1,2,3].map(g=>{
                           const L=lines.find(x=>x.game_number===g && x.team_side===side && x.player_slot===slot)
-                          return <td style={td} key={g}><input type='number' min='0' value={L?.scratch||0} onChange={e=>updateScratch(g,side,slot,e.target.value)} style={{width:80}}/></td>
+                        return (
+                          <td style={td} key={g}>
+                            <input
+                              type='number'
+                              min='0'
+                              value={L?.scratch||0}
+                              onChange={e=>updateScratch(g,side,slot,Number(e.target.value)||0)}
+                              disabled={disabled}
+                              style={{width:80}}
+                            />
+                          </td>
+                        )
                         })}
                       </tr>
                     )
@@ -209,13 +256,24 @@ function ScoresApp(){
 
 function RolloffForm({fixtureId,pending}){
   const [L,setL]=useState(0), [R,setR]=useState(0)
-  const winner = L>R?'left':(R>L?'right':null)
+  const lnum = Number(L) || 0
+  const rnum = Number(R) || 0
+  const winner = lnum>rnum ? 'left' : (rnum>lnum ? 'right' : null)
   const label = pending.scope==='series' ? 'Series roll-off' :
                 pending.scope==='game'   ? `Game ${pending.game_number} roll-off` :
                 `H2H G${pending.game_number} (L${pending.left_slot} vs R${pending.right_slot})`
   const save=async()=>{
     if(!winner) return alert('Το roll-off δεν μπορεί να είναι ισόπαλο.')
-    const payload={fixture_id:Number(fixtureId),scope:pending.scope,game_number:pending.game_number??null,left_slot:pending.left_slot??null,right_slot:pending.right_slot??null,left_score:Number(L),right_score:Number(R),winner_side:winner}
+    const payload={
+      fixture_id:Number(fixtureId),
+      scope:pending.scope,
+      game_number:pending.game_number??null,
+      left_slot:pending.left_slot??null,
+      right_slot:pending.right_slot??null,
+      left_score:lnum,
+      right_score:rnum,
+      winner_side:winner
+    }
     try{
       const j=await api('rolloffs',{method:'POST',body:JSON.stringify(payload)})
       if(!j.ok) alert('Error: '+(j.error||'unknown'))
@@ -226,9 +284,9 @@ function RolloffForm({fixtureId,pending}){
   return (
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
       <div style={{minWidth:280}}>{label}</div>
-      <input type='number' value={L} onChange={e=>setL(e.target.value)} placeholder='Left' style={{width:90}} />
+      <input type='number' value={lnum} onChange={e=>setL(Number(e.target.value)||0)} placeholder='Left' style={{width:90}} />
       <span>—</span>
-      <input type='number' value={R} onChange={e=>setR(e.target.value)} placeholder='Right' style={{width:90}} />
+      <input type='number' value={rnum} onChange={e=>setR(Number(e.target.value)||0)} placeholder='Right' style={{width:90}} />
       <button className='button' onClick={save}>Save</button>
     </div>
   )
