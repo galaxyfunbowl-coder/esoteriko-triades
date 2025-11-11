@@ -5,11 +5,11 @@ export default defineConfig({
   plugins:[react()],
   root: resolve(__dirname),
   build:{
-    outDir: ''dist'',
-    emptyOutDir: true,
+    outDir:''dist'',
+    emptyOutDir:false,
     rollupOptions:{
-      input: resolve(__dirname,''index.html''),
-      output:{ entryFileNames:''assets/[name].js'', assetFileNames:''assets/[name][extname]'' }
+      input: resolve(__dirname,''admin.jsx''),
+      output:{ entryFileNames:''assets/admin.js'', assetFileNames:''assets/[name][extname]'' }
     }
   }
 })

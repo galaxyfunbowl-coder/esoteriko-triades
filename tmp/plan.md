@@ -1,22 +1,23 @@
-# Σχέδιο Plugin Galaxy League
+# Σχέδιο Plugin Galaxy League v0.2.0
 
 ## Current state
-- Κενό repository
-- Δεν υπάρχει δομή WordPress plugin ούτε schema
+- Υπάρχει plugin scaffold (v0.1.0) χωρίς API/Logic/Admin React
+- Χρειάζεται αναδόμηση σύμφωνα με νέο specification (Prompts 0-8)
 
 ## Final state
-- Φάκελος plugin με αρχεία PHP, inc, assets, sql, readme.txt όπως περιγράφηκε
-- migrations.mysql.sql έτοιμο με βασικό schema
-- React/Vite setup στο assets με βασικό App για standings
-- Τεκμηρίωση build
+- Ενημερωμένη δομή plugin με νέα αρχεία inc (DB, Admin, Standings, Ajax, Api, Logic)
+- Εκτενές migrations.mysql.sql με πλήρες schema
+- React assets με public App και admin panel, δύο Vite configs
+- Ενημερωμένο main plugin και readme με οδηγίες build/rules
 
 ## Files to change
-- Προσθήκη νέων αρχείων σε όλη τη δομή plugin
+- wp-plugin-galaxy-league/** (αντικατάσταση/ενημέρωση όλων των αρχείων)
+- tmp/plan.md (τρέχον αρχείο ενημερώθηκε)
 
 ## Tasks
-- [ ] Δημιουργία δομής φακέλων
-- [ ] Προσθήκη migrations.mysql.sql
-- [ ] Υλοποίηση αρχείων PHP (main, inc classes)
-- [ ] Στήσιμο React assets (package.json, vite config, components)
-- [ ] Δημιουργία readme και build οδηγιών
+- [ ] Ανασχεδιασμός migrations.sql σύμφωνα με Prompt 2
+- [ ] Αναβάθμιση κύριου plugin και inc/* (DB/Admin/Standings/Ajax/Logic/Api)
+- [ ] Δημιουργία/ενημέρωση React assets (App, admin, Vite configs)
+- [ ] Ενημέρωση readme με νέες οδηγίες
+- [ ] Βuild οδηγίες/έλεγχος (npm build script ενημέρωση)
 
