@@ -71,13 +71,22 @@ class GLR_Logic {
     $rightAbsent = (int)$fx['right_side_absent'] === 1;
 
     $stmt = $pdo->prepare("
-      SELECT gp.game_number, gp.team_side, gp.player_slot, gp.player_id, gp.scratch, gp.handicap, gp.total, gp.is_blind
+      SELECT gp.game_number, gp.team_side, gp.player_slot, gp.player_id,
+             gp.scratch, gp.handicap, gp.is_blind
       FROM game_participants gp
       WHERE gp.fixture_id=?
       ORDER BY gp.game_number, gp.team_side, gp.player_slot
     ");
     $stmt->execute([$fixture_id]);
     $rows = $stmt->fetchAll();
+
+    foreach ($rows as &$r) {
+      $scratch = (int)$r['scratch'];
+      $handicap = (int)$r['handicap'];
+      $isBlind = ((int)$r['is_blind'] === 1);
+      $r['total'] = $isBlind ? $scratch : ($scratch + $handicap);
+    }
+    unset($r);
 
     $games = [1=>['left'=>[], 'right'=>[]], 2=>['left'=>[], 'right'=>[]], 3=>['left'=>[], 'right'=>[]]];
     foreach ($rows as $r) {
