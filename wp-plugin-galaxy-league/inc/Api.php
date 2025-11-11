@@ -179,7 +179,8 @@ class GLR_Api {
                     AND idx < (SELECT idx FROM match_days WHERE id=?)
                   )
                ) AS avg
-        FROM players p WHERE p.team_id=? ORDER BY avg DESC NULLS LAST LIMIT 3
+        FROM players p WHERE p.team_id=?
+        ORDER BY (avg IS NULL), avg DESC LIMIT 3
       ");
       $q->execute([$match_day_id,$match_day_id,$team_id]);
       return $q->fetchAll();
@@ -440,7 +441,7 @@ class GLR_Api {
   public static function fixtures_manage(\WP_REST_Request $req){
     $pdo=GLR_DB::pdo(); $season_id=(int)$req->get_param('season_id');
     if(!$season_id) throw new Exception('season_id required');
-    $sql='SELECT f.id, f.match_day_id, md.idx AS md_idx, tl.name AS left_team, tr.name AS right_team, f.lane_id
+    $sql='SELECT f.id, f.match_day_id, f.left_team_id, f.right_team_id, md.idx AS md_idx, tl.name AS left_team, tr.name AS right_team, f.lane_id
           FROM fixtures f JOIN match_days md ON md.id=f.match_day_id
           JOIN teams tl ON tl.id=f.left_team_id JOIN teams tr ON tr.id=f.right_team_id
           WHERE md.season_id=? ORDER BY md.idx, f.id';

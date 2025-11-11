@@ -258,7 +258,12 @@ function StepHC({ onNext }) {
 
   useEffect(() => {
     if (matchDayId) {
-      api(`hc/list?match_day_id=${matchDayId}`).then(j => setRows(j.rows || []))
+      api(`hc/list?match_day_id=${matchDayId}`)
+        .then(j => setRows(j.rows || []))
+        .catch(err => {
+          alert(err.message)
+          setRows([])
+        })
     } else {
       setRows([])
     }
@@ -352,8 +357,18 @@ function StepOrder({ onDone }) {
 
   useEffect(() => {
     if (seasonId) {
-      api(`match-days?season_id=${seasonId}`).then(j => setMatchDays(j.rows || []))
-      api(`fixtures-manage?season_id=${seasonId}`).then(j => setFixtures(j.rows || []))
+      api(`match-days?season_id=${seasonId}`)
+        .then(j => {
+          setMatchDays(j.rows || [])
+          if (!j.rows || j.rows.length === 0) {
+            alert('Δεν βρέθηκαν αγωνιστικές για τη season. Πήγαινε στο βήμα 1 (ή Manage) και δημιουργήσέ τες.')
+          }
+        })
+        .catch(err => {
+          alert(err.message)
+          setMatchDays([])
+        })
+      api(`fixtures-manage?season_id=${seasonId}`).then(j => setFixtures(j.rows || [])).catch(console.error)
       setMatchDayId('')
       setForm({ lane_id: '', left_team_id: '', right_team_id: '' })
     } else {
@@ -361,10 +376,6 @@ function StepOrder({ onDone }) {
       setFixtures([])
     }
   }, [seasonId])
-
-  useEffect(() => {
-    setForm(prev => ({ ...prev, match_day_id: matchDayId }))
-  }, [matchDayId])
 
   const addFixture = async () => {
     if (!matchDayId || !form.left_team_id || !form.right_team_id) {
@@ -387,6 +398,11 @@ function StepOrder({ onDone }) {
     } catch (err) {
       alert(err.message)
     }
+  }
+
+  const teamNameById = id => {
+    const team = teams.find(t => String(t.id) === String(id))
+    return team ? team.name : '-'
   }
 
   return (
@@ -446,9 +462,9 @@ function StepOrder({ onDone }) {
         </thead>
         <tbody>
           {fixtures
-            .filter(f => Number(f.md_idx) === 1)
+            .filter(f => String(f.match_day_id) === String(matchDayId))
             .map(f => (
-              <FixtureOrderRow key={f.id} fixture={f} teams={teams} />
+              <FixtureOrderRow key={f.id} fixture={f} teamNameById={teamNameById} />
             ))}
         </tbody>
       </table>
@@ -460,23 +476,16 @@ function StepOrder({ onDone }) {
   )
 }
 
-function FixtureOrderRow({ fixture, teams }) {
+function FixtureOrderRow({ fixture, teamNameById }) {
   const [order, setOrder] = useState([])
   const [leftPlayers, setLeftPlayers] = useState([])
   const [rightPlayers, setRightPlayers] = useState([])
 
-  const findTeamId = name => {
-    const team = teams.find(t => t.name === name)
-    return team ? team.id : null
-  }
-
   useEffect(() => {
-    const leftId = findTeamId(fixture.left_team)
-    const rightId = findTeamId(fixture.right_team)
-    if (leftId) api(`players?team_id=${leftId}`).then(j => setLeftPlayers(j.rows || [])).catch(console.error)
-    if (rightId) api(`players?team_id=${rightId}`).then(j => setRightPlayers(j.rows || [])).catch(console.error)
+    if (fixture.left_team_id) api(`players?team_id=${fixture.left_team_id}`).then(j => setLeftPlayers(j.rows || [])).catch(console.error)
+    if (fixture.right_team_id) api(`players?team_id=${fixture.right_team_id}`).then(j => setRightPlayers(j.rows || [])).catch(console.error)
     api(`player-order?fixture_id=${fixture.id}`).then(j => setOrder(j.rows || [])).catch(console.error)
-  }, [fixture.id, teams])
+  }, [fixture.id, fixture.left_team_id, fixture.right_team_id])
 
   const valueFor = (side, slot) => order.find(o => o.team_side === side && o.slot === slot)?.player_id || ''
 
@@ -506,8 +515,8 @@ function FixtureOrderRow({ fixture, teams }) {
     <tr>
       <td>{fixture.md_idx}</td>
       <td>{fixture.lane_id || '-'}</td>
-      <td>{fixture.left_team}</td>
-      <td>{fixture.right_team}</td>
+      <td>{teamNameById(fixture.left_team_id)}</td>
+      <td>{teamNameById(fixture.right_team_id)}</td>
       <td>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <OrderSide title='Left' players={leftPlayers} side='left' valueFor={valueFor} onChange={change} />

@@ -194,6 +194,11 @@ function FixturesTab(){
     }
   }
 
+  const teamNameById=id=>{
+    const t=teams.find(tm=>String(tm.id)===String(id))
+    return t?t.name:'-'
+  }
+
   return (
     <>
       <h2>Program (Fixtures)</h2>
@@ -215,20 +220,18 @@ function FixturesTab(){
       </div>
 
       <table style={tbl}><thead><tr><th>MD</th><th>Lane</th><th>Left</th><th>Right</th><th>Order</th></tr></thead>
-      <tbody>{fx.map(f=><FixtureRow key={f.id} f={f} teams={teams}/>)}</tbody></table>
+      <tbody>{fx.filter(f=>!mdId || String(f.match_day_id)===String(mdId)).map(f=><FixtureRow key={f.id} f={f} teamNameById={teamNameById}/>)}</tbody></table>
     </>
   )
 }
-function FixtureRow({f,teams}){
+function FixtureRow({f,teamNameById}){
   const [order,setOrder]=useState([])
   const [playersL,setPlayersL]=useState([]); const [playersR,setPlayersR]=useState([])
   useEffect(()=>{ api(`player-order?fixture_id=${f.id}`).then(j=>setOrder(j.rows||[])).catch(console.error) },[f.id])
   useEffect(()=>{
-    const leftTeam = teams.find(t=>t.name===f.left_team)
-    const rightTeam = teams.find(t=>t.name===f.right_team)
-    if (leftTeam) api(`players?team_id=${leftTeam.id}`).then(j=>setPlayersL(j.rows||[])).catch(console.error)
-    if (rightTeam) api(`players?team_id=${rightTeam.id}`).then(j=>setPlayersR(j.rows||[])).catch(console.error)
-  },[f.id,teams])
+    if (f.left_team_id) api(`players?team_id=${f.left_team_id}`).then(j=>setPlayersL(j.rows||[])).catch(console.error)
+    if (f.right_team_id) api(`players?team_id=${f.right_team_id}`).then(j=>setPlayersR(j.rows||[])).catch(console.error)
+  },[f.id,f.left_team_id,f.right_team_id])
   const valueOf=(side,slot)=> order.find(o=>o.team_side===side && o.slot===slot)?.player_id || ''
   const change=(side,slot,val)=>{
     setOrder(prev=>{
@@ -246,7 +249,7 @@ function FixtureRow({f,teams}){
   }
   return (
     <tr>
-      <td>{f.md_idx}</td><td>{f.lane_id||'-'}</td><td>{f.left_team}</td><td>{f.right_team}</td>
+      <td>{f.md_idx}</td><td>{f.lane_id||'-'}</td><td>{teamNameById(f.left_team_id)}</td><td>{teamNameById(f.right_team_id)}</td>
       <td>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
           {['left','right'].map(side=>(
