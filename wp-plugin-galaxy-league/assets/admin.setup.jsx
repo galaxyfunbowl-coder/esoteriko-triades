@@ -1,11 +1,24 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
-const api = (path, opt = {}) =>
-  fetch(GLR.rest + path, {
+const api = async (path, opt = {}) => {
+  const res = await fetch(GLR.rest + path, {
     headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
     ...opt
-  }).then(r => r.json())
+  })
+  const text = await res.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch (err) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  if (!res.ok || (data && data.ok === false) || data?.success === false) {
+    const msg = data?.error || data?.message || data?.data?.message
+    throw new Error(msg || `HTTP ${res.status}`)
+  }
+  return data
+}
 
 function Setup() {
   const [step, setStep] = useState(1)
@@ -46,11 +59,15 @@ function StepSeason({ onNext }) {
   const [seasonId, setSeasonId] = useState('')
 
   const createSeason = async () => {
-    const res = await api('seasons', {
-      method: 'POST',
-      body: JSON.stringify({ name, year, total_match_days: matchDays })
-    })
-    setSeasonId(res.id)
+    try {
+      const res = await api('seasons', {
+        method: 'POST',
+        body: JSON.stringify({ name, year, total_match_days: matchDays })
+      })
+      setSeasonId(res.id)
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   const createMatchDays = async () => {
@@ -58,21 +75,25 @@ function StepSeason({ onNext }) {
       alert('Πρώτα φτιάξε Season')
       return
     }
-    const baseDate = new Date()
-    for (let i = 1; i <= matchDays; i += 1) {
-      const dt = new Date(baseDate.getTime() + (i - 1) * 7 * 24 * 3600 * 1000)
-      await api('match-days', {
-        method: 'POST',
-        body: JSON.stringify({
-          season_id: Number(seasonId),
-          idx: i,
-          label: `${i}η Αγωνιστική`,
-          date: dt.toISOString().slice(0, 10),
-          type: 'regular'
+    try {
+      const baseDate = new Date()
+      for (let i = 1; i <= matchDays; i += 1) {
+        const dt = new Date(baseDate.getTime() + (i - 1) * 7 * 24 * 3600 * 1000)
+        await api('match-days', {
+          method: 'POST',
+          body: JSON.stringify({
+            season_id: Number(seasonId),
+            idx: i,
+            label: `${i}η Αγωνιστική`,
+            date: dt.toISOString().slice(0, 10),
+            type: 'regular'
+          })
         })
-      })
+      }
+      alert('Έτοιμες οι αγωνιστικές')
+    } catch (err) {
+      alert(err.message)
     }
-    alert('Έτοιμες οι αγωνιστικές')
   }
 
   return (
@@ -106,7 +127,10 @@ function StepTeams({ onNext }) {
   const [players, setPlayers] = useState([])
   const [playerForm, setPlayerForm] = useState({ full_name: '', gender: 'M', base_hc: 0 })
 
-  const refreshTeams = () => api('teams').then(j => setTeams(j.rows || []))
+  const refreshTeams = () =>
+    api('teams')
+      .then(j => setTeams(j.rows || []))
+      .catch(console.error)
 
   useEffect(() => {
     refreshTeams()
@@ -122,9 +146,13 @@ function StepTeams({ onNext }) {
 
   const addTeam = async () => {
     if (!teamName.trim()) return
-    await api('teams', { method: 'POST', body: JSON.stringify({ name: teamName.trim() }) })
-    setTeamName('')
-    refreshTeams()
+    try {
+      await api('teams', { method: 'POST', body: JSON.stringify({ name: teamName.trim() }) })
+      setTeamName('')
+      refreshTeams()
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   const addPlayer = async () => {
@@ -136,16 +164,22 @@ function StepTeams({ onNext }) {
       alert('Όνομα παίκτη')
       return
     }
-    await api('players', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...playerForm,
-        team_id: Number(teamId),
-        full_name: playerForm.full_name.trim()
+    try {
+      await api('players', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...playerForm,
+          team_id: Number(teamId),
+          full_name: playerForm.full_name.trim()
+        })
       })
-    })
-    setPlayerForm({ full_name: '', gender: 'M', base_hc: 0 })
-    api(`players?team_id=${teamId}`).then(j => setPlayers(j.rows || []))
+      setPlayerForm({ full_name: '', gender: 'M', base_hc: 0 })
+      api(`players?team_id=${teamId}`)
+        .then(j => setPlayers(j.rows || []))
+        .catch(console.error)
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   return (
@@ -235,14 +269,18 @@ function StepHC({ onNext }) {
 
   const save = async () => {
     if (!matchDayId) return
-    await api('hc/save', {
-      method: 'POST',
-      body: JSON.stringify({
-        match_day_id: Number(matchDayId),
-        rows: rows.map(r => ({ player_id: r.player_id, handicap: Number(r.handicap || 0) }))
+    try {
+      await api('hc/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          match_day_id: Number(matchDayId),
+          rows: rows.map(r => ({ player_id: r.player_id, handicap: Number(r.handicap || 0) }))
+        })
       })
-    })
-    alert('Αποθηκεύτηκαν τα handicap')
+      alert('Αποθηκεύτηκαν τα handicap')
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   return (
@@ -333,16 +371,22 @@ function StepOrder({ onDone }) {
       alert('Συμπλήρωσε Match Day και ομάδες')
       return
     }
-    await api('fixtures', {
-      method: 'POST',
-      body: JSON.stringify({
-        match_day_id: Number(matchDayId),
-        lane_id: form.lane_id ? Number(form.lane_id) : null,
-        left_team_id: Number(form.left_team_id),
-        right_team_id: Number(form.right_team_id)
+    try {
+      await api('fixtures', {
+        method: 'POST',
+        body: JSON.stringify({
+          match_day_id: Number(matchDayId),
+          lane_id: form.lane_id ? Number(form.lane_id) : null,
+          left_team_id: Number(form.left_team_id),
+          right_team_id: Number(form.right_team_id)
+        })
       })
-    })
-    api(`fixtures-manage?season_id=${seasonId}`).then(j => setFixtures(j.rows || []))
+      api(`fixtures-manage?season_id=${seasonId}`)
+        .then(j => setFixtures(j.rows || []))
+        .catch(console.error)
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   return (
@@ -429,9 +473,9 @@ function FixtureOrderRow({ fixture, teams }) {
   useEffect(() => {
     const leftId = findTeamId(fixture.left_team)
     const rightId = findTeamId(fixture.right_team)
-    if (leftId) api(`players?team_id=${leftId}`).then(j => setLeftPlayers(j.rows || []))
-    if (rightId) api(`players?team_id=${rightId}`).then(j => setRightPlayers(j.rows || []))
-    api(`player-order?fixture_id=${fixture.id}`).then(j => setOrder(j.rows || []))
+    if (leftId) api(`players?team_id=${leftId}`).then(j => setLeftPlayers(j.rows || [])).catch(console.error)
+    if (rightId) api(`players?team_id=${rightId}`).then(j => setRightPlayers(j.rows || [])).catch(console.error)
+    api(`player-order?fixture_id=${fixture.id}`).then(j => setOrder(j.rows || [])).catch(console.error)
   }, [fixture.id, teams])
 
   const valueFor = (side, slot) => order.find(o => o.team_side === side && o.slot === slot)?.player_id || ''
@@ -447,11 +491,15 @@ function FixtureOrderRow({ fixture, teams }) {
   }
 
   const save = async () => {
-    await api('player-order', {
-      method: 'POST',
-      body: JSON.stringify({ fixture_id: fixture.id, rows: order })
-    })
-    alert('Saved')
+    try {
+      await api('player-order', {
+        method: 'POST',
+        body: JSON.stringify({ fixture_id: fixture.id, rows: order })
+      })
+      alert('Saved')
+    } catch (err) {
+      alert(err.message)
+    }
   }
 
   return (

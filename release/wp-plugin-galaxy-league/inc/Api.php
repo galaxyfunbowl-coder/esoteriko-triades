@@ -455,13 +455,28 @@ class GLR_Api {
     $left_team_id = (int)($b['left_team_id']??0);
     $right_team_id = (int)($b['right_team_id']??0);
     if(!$match_day_id||!$left_team_id||!$right_team_id) throw new Exception('fixture fields missing');
+    $check=$pdo->prepare('SELECT COUNT(*) FROM match_days WHERE id=?');
+    $check->execute([$match_day_id]);
+    if(!$check->fetchColumn()) throw new Exception('Το match day δεν υπάρχει. Βεβαιώσου ότι έχεις ολοκληρώσει το Setup (Step 1).');
+    $teamsCheck=$pdo->prepare('SELECT id FROM teams WHERE id IN (?,?)');
+    $teamsCheck->execute([$left_team_id,$right_team_id]);
+    $found=$teamsCheck->fetchAll(\PDO::FETCH_COLUMN);
+    if(!in_array($left_team_id,$found,true) || !in_array($right_team_id,$found,true)) throw new Exception('Μία από τις ομάδες δεν υπάρχει πλέον.');
     if ($id) {
       $st=$pdo->prepare('UPDATE fixtures SET match_day_id=?, lane_id=?, left_team_id=?, right_team_id=? WHERE id=?');
-      $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id,$id]);
+      try {
+        $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id,$id]);
+      } catch(\PDOException $e) {
+        throw new Exception('Αδυναμία ενημέρωσης fixture: '.$e->getMessage());
+      }
     } else {
       $st=$pdo->prepare('INSERT INTO fixtures(match_day_id,lane_id,left_team_id,right_team_id) VALUES (?,?,?,?)');
-      $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id]);
-      $id=(int)$pdo->lastInsertId();
+      try {
+        $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id]);
+        $id=(int)$pdo->lastInsertId();
+      } catch(\PDOException $e) {
+        throw new Exception('Αδυναμία δημιουργίας fixture: '.$e->getMessage());
+      }
     }
     return ['ok'=>true,'id'=>$id];
   }
