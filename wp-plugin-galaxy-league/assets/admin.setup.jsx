@@ -359,9 +359,13 @@ function StepOrder({ onDone }) {
     if (seasonId) {
       api(`match-days?season_id=${seasonId}`)
         .then(j => {
-          setMatchDays(j.rows || [])
-          if (!j.rows || j.rows.length === 0) {
+          const rows = j.rows || []
+          setMatchDays(rows)
+          if (!rows.length) {
             alert('Δεν βρέθηκαν αγωνιστικές για τη season. Πήγαινε στο βήμα 1 (ή Manage) και δημιουργήσέ τες.')
+          } else {
+            const md1 = rows.find(x => Number(x.idx) === 1) || rows[0]
+            setMatchDayId(String(md1.id))
           }
         })
         .catch(err => {
@@ -369,7 +373,6 @@ function StepOrder({ onDone }) {
           setMatchDays([])
         })
       api(`fixtures-manage?season_id=${seasonId}`).then(j => setFixtures(j.rows || [])).catch(console.error)
-      setMatchDayId('')
       setForm({ lane_id: '', left_team_id: '', right_team_id: '' })
     } else {
       setMatchDays([])
@@ -382,12 +385,26 @@ function StepOrder({ onDone }) {
       alert('Συμπλήρωσε Match Day και ομάδες')
       return
     }
+    if (String(form.left_team_id) === String(form.right_team_id)) {
+      alert('Η ίδια ομάδα δεν μπορεί να είναι και Left και Right')
+      return
+    }
+    const exists = fixtures.some(
+      f =>
+        String(f.match_day_id) === String(matchDayId) &&
+        String(f.left_team_id) === String(form.left_team_id) &&
+        String(f.right_team_id) === String(form.right_team_id)
+    )
+    if (exists) {
+      alert('Υπάρχει ήδη αυτό το fixture για την επιλεγμένη αγωνιστική.')
+      return
+    }
     try {
       await api('fixtures', {
         method: 'POST',
         body: JSON.stringify({
           match_day_id: Number(matchDayId),
-          lane_id: form.lane_id ? Number(form.lane_id) : null,
+          lane_id: form.lane_id !== '' ? Number(form.lane_id) : null,
           left_team_id: Number(form.left_team_id),
           right_team_id: Number(form.right_team_id)
         })
@@ -395,6 +412,7 @@ function StepOrder({ onDone }) {
       api(`fixtures-manage?season_id=${seasonId}`)
         .then(j => setFixtures(j.rows || []))
         .catch(console.error)
+      setForm({ lane_id: '', left_team_id: '', right_team_id: '' })
     } catch (err) {
       alert(err.message)
     }
@@ -461,11 +479,19 @@ function StepOrder({ onDone }) {
           </tr>
         </thead>
         <tbody>
-          {fixtures
+        {fixtures.filter(f => String(f.match_day_id) === String(matchDayId)).length === 0 ? (
+          <tr>
+            <td colSpan={5} style={{ textAlign: 'center', opacity: 0.7 }}>
+              Δεν υπάρχουν fixtures για αυτή την αγωνιστική.
+            </td>
+          </tr>
+        ) : (
+          fixtures
             .filter(f => String(f.match_day_id) === String(matchDayId))
             .map(f => (
               <FixtureOrderRow key={f.id} fixture={f} teamNameById={teamNameById} />
-            ))}
+            ))
+        )}
         </tbody>
       </table>
 
@@ -482,8 +508,22 @@ function FixtureOrderRow({ fixture, teamNameById }) {
   const [rightPlayers, setRightPlayers] = useState([])
 
   useEffect(() => {
-    if (fixture.left_team_id) api(`players?team_id=${fixture.left_team_id}`).then(j => setLeftPlayers(j.rows || [])).catch(console.error)
-    if (fixture.right_team_id) api(`players?team_id=${fixture.right_team_id}`).then(j => setRightPlayers(j.rows || [])).catch(console.error)
+    if (fixture.left_team_id)
+      api(`players?team_id=${fixture.left_team_id}`)
+        .then(j => {
+          const rows = j.rows || []
+          rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'el'))
+          setLeftPlayers(rows)
+        })
+        .catch(console.error)
+    if (fixture.right_team_id)
+      api(`players?team_id=${fixture.right_team_id}`)
+        .then(j => {
+          const rows = j.rows || []
+          rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'el'))
+          setRightPlayers(rows)
+        })
+        .catch(console.error)
     api(`player-order?fixture_id=${fixture.id}`).then(j => setOrder(j.rows || [])).catch(console.error)
   }, [fixture.id, fixture.left_team_id, fixture.right_team_id])
 
@@ -493,8 +533,19 @@ function FixtureOrderRow({ fixture, teamNameById }) {
     setOrder(prev => {
       const copy = [...prev]
       const idx = copy.findIndex(o => o.team_side === side && o.slot === slot)
-      if (idx >= 0) copy[idx] = { ...copy[idx], player_id: Number(value) }
-      else copy.push({ team_side: side, slot, player_id: Number(value) })
+      if (value === '' || value === null || value === undefined) {
+        if (idx >= 0) copy.splice(idx, 1)
+        return copy
+      }
+      const pid = Number(value)
+      if (Number.isNaN(pid)) return copy
+      const dup = copy.find(o => o.team_side === side && o.player_id === pid)
+      if (dup && dup.slot !== slot) {
+        alert('Ο ίδιος παίκτης έχει ήδη επιλεγεί σε άλλη θέση.')
+        return copy
+      }
+      if (idx >= 0) copy[idx] = { ...copy[idx], player_id: pid }
+      else copy.push({ team_side: side, slot, player_id: pid })
       return copy
     })
   }
