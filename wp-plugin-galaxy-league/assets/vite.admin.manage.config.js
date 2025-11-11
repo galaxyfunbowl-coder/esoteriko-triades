@@ -8,8 +8,9 @@ export default defineConfig({
     outDir:'dist',
     emptyOutDir:false,
     rollupOptions:{
-      input: resolve(__dirname,'admin.jsx'),
-      output:{ entryFileNames:'assets/admin.js', assetFileNames:'assets/[name][extname]' }
+      input: resolve(__dirname,'admin.manage.jsx'),
+      output:{ entryFileNames:'assets/admin-manage.js', assetFileNames:'assets/[name][extname]' }
     }
   }
 })
+
