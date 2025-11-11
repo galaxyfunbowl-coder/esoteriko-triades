@@ -1,6 +1,26 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 
+const api = async (path, opt = {}) => {
+  const res = await fetch(GLR.rest + path, {
+    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
+    credentials: 'same-origin',
+    ...opt
+  })
+  const text = await res.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch (err) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  if (!res.ok || data?.ok === false || data?.success === false) {
+    const msg = data?.error || data?.message || data?.data?.message
+    throw new Error(msg || `HTTP ${res.status}`)
+  }
+  return data
+}
+
 function ScoresApp(){
   const [seasons,setSeasons]=useState([])
   const [seasonId,setSeasonId]=useState('')
@@ -13,15 +33,13 @@ function ScoresApp(){
   const [pending,setPending]=useState([])
   const [absent,setAbsent]=useState({left:false,right:false})
 
-  const jget=(p)=>fetch(`${GLR.rest}${p}`).then(r=>r.json())
-
-  useEffect(()=>{ jget('seasons').then(j=>setSeasons(j.rows||[])) },[])
-  useEffect(()=>{ if(!seasonId) return; jget(`match-days?season_id=${seasonId}`).then(j=>setMatchDays(j.rows||[])) },[seasonId])
-  useEffect(()=>{ if(!matchDayId) return; jget(`fixtures?match_day_id=${matchDayId}`).then(j=>setFixtures(j.rows||[])) },[matchDayId])
+  useEffect(()=>{ api('seasons').then(j=>setSeasons(j.rows||[])).catch(err=>alert(err.message)) },[])
+  useEffect(()=>{ if(!seasonId) return; api(`match-days?season_id=${seasonId}`).then(j=>setMatchDays(j.rows||[])).catch(err=>alert(err.message)) },[seasonId])
+  useEffect(()=>{ if(!matchDayId) return; api(`fixtures?match_day_id=${matchDayId}`).then(j=>setFixtures(j.rows||[])).catch(err=>alert(err.message)) },[matchDayId])
 
   useEffect(()=>{
     if(!fixtureId) return
-    jget(`participants?fixture_id=${fixtureId}`).then(j=>{
+    api(`participants?fixture_id=${fixtureId}`).then(j=>{
       setParticipants(j)
       const seeded=[]
       ;[1,2,3].forEach(g=>['left','right'].forEach(side=>[1,2,3].forEach(slot=>{
@@ -31,27 +49,39 @@ function ScoresApp(){
       setLines(seeded)
       const fx=fixtures.find(f=>String(f.id)===String(fixtureId))
       setAbsent({left:!!fx?.left_side_absent,right:!!fx?.right_side_absent})
-    })
-  },[fixtureId])
+    }).catch(err=>alert(err.message))
+  },[fixtureId,fixtures])
 
   const updateScratch=(g,side,slot,val)=>setLines(prev=>prev.map(L=>L.game_number===g&&L.team_side===side&&L.player_slot===slot?{...L,scratch:Number(val||0)}:L))
   const toggleBlind=(side,slot,checked)=>setLines(prev=>prev.map(L=>L.team_side===side&&L.player_slot===slot?{...L,is_blind:checked?1:0}:L))
 
   const saveAbsence=async()=>{
-    const res=await fetch(`${GLR.rest}fixture-absence`,{method:'POST',headers:{'Content-Type':'application/json','X-WP-Nonce':GLR.nonce},body:JSON.stringify({fixture_id:Number(fixtureId),left_side_absent:absent.left,right_side_absent:absent.right})})
-    const j=await res.json(); if(!j.ok) alert('Error: '+j.error)
+    try{
+      const j=await api('fixture-absence',{method:'POST',body:JSON.stringify({fixture_id:Number(fixtureId),left_side_absent:absent.left,right_side_absent:absent.right})})
+      if(!j.ok) alert('Error: '+(j.error||'unknown'))
+    }catch(err){
+      alert(err.message)
+    }
   }
 
   const submit=async()=>{
     const payload={fixture_id:Number(fixtureId),match_day_id:Number(participants.match_day_id),lines}
-    const res=await fetch(`${GLR.rest}submit-scores`,{method:'POST',headers:{'Content-Type':'application/json','X-WP-Nonce':GLR.nonce},body:JSON.stringify(payload)})
-    const j=await res.json()
-    if(j.ok){ setPending(j.result?.rolloffs_pending||[]); alert('Saved') } else alert('Error: '+j.error)
+    try{
+      const j=await api('submit-scores',{method:'POST',body:JSON.stringify(payload)})
+      setPending(j.result?.rolloffs_pending||[])
+      alert('Saved')
+    }catch(err){
+      alert(err.message)
+    }
   }
 
   const recompute=async()=>{
-    const r=await fetch(`${GLR.rest}recompute`,{method:'POST',headers:{'Content-Type':'application/json','X-WP-Nonce':GLR.nonce},body:JSON.stringify({fixture_id:Number(fixtureId)})})
-    const j=await r.json(); setPending(j.result?.rolloffs_pending||[])
+    try{
+      const j=await api('recompute',{method:'POST',body:JSON.stringify({fixture_id:Number(fixtureId)})})
+      setPending(j.result?.rolloffs_pending||[])
+    }catch(err){
+      alert(err.message)
+    }
   }
 
   return (
@@ -68,6 +98,12 @@ function ScoresApp(){
           {' '}|{' '}
           <label><input type='checkbox' checked={absent.right} onChange={e=>setAbsent(a=>({...a,right:e.target.checked}))}/> Right Absent</label>
           {' '}<button className='button' onClick={saveAbsence}>Save Absence</button>
+        </div>
+      )}
+
+      {fixtureId && participants.rows?.length===0 && (
+        <div style={{margin:'16px 0',padding:12,border:'1px solid #f0ad4e',borderRadius:8,background:'#fff8e5'}}>
+          Δεν βρέθηκαν παίκτες για το fixture. Έλεγξε ότι έχεις αποθηκεύσει τη σειρά παικτών στο Setup → Order 1ης.
         </div>
       )}
 
@@ -124,8 +160,12 @@ function RolloffForm({fixtureId,pending}){
   const save=async()=>{
     if(!winner) return alert('Το roll-off δεν μπορεί να είναι ισόπαλο.')
     const payload={fixture_id:Number(fixtureId),scope:pending.scope,game_number:pending.game_number??null,left_slot:pending.left_slot??null,right_slot:pending.right_slot??null,left_score:Number(L),right_score:Number(R),winner_side:winner}
-    const r=await fetch(`${GLR.rest}rolloffs`,{method:'POST',headers:{'Content-Type':'application/json','X-WP-Nonce':GLR.nonce},body:JSON.stringify(payload)})
-    const j=await r.json(); if(!j.ok) alert('Error: '+j.error)
+    try{
+      const j=await api('rolloffs',{method:'POST',body:JSON.stringify(payload)})
+      if(!j.ok) alert('Error: '+(j.error||'unknown'))
+    }catch(err){
+      alert(err.message)
+    }
   }
   return (
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
