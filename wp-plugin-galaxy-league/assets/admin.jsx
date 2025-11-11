@@ -85,36 +85,45 @@ function ScoresApp(){
 
   useEffect(()=>{
     if(!fixtureId) return
-    api(`participants?fixture_id=${fixtureId}`).then(res=>{
-      const rows = res?.rows || []
-      const mdId = res?.match_day_id ? Number(res.match_day_id) : null
-      setParticipants({rows,match_day_id:mdId})
-      const seeded=[]
-      if(rows.length){
-        [1,2,3].forEach(g=>{
-          ['left','right'].forEach(side=>{
-            [1,2,3].forEach(slot=>{
-              const row=rows.find(r=>r.team_side===side && r.slot===slot)
-              if(row){
-                seeded.push({
-                  fixture_id: Number(fixtureId),
-                  game_number: g,
-                  team_side: side,
-                  player_slot: slot,
-                  player_id: row.player_id,
-                  scratch: 0,
-                  is_blind: 0
-                })
-              }
+
+    api(`participants?fixture_id=${fixtureId}`)
+      .then(res=>{
+        const rows = Array.isArray(res?.rows) ? res.rows : []
+        const mdId = res?.match_day_id ? Number(res.match_day_id) : null
+        setParticipants({rows,match_day_id:mdId})
+
+        const seeded=[]
+        if(rows.length){
+          [1,2,3].forEach(g=>{
+            ['left','right'].forEach(side=>{
+              [1,2,3].forEach(slot=>{
+                const row=rows.find(r=>r?.team_side===side && r?.slot===slot)
+                if(row){
+                  seeded.push({
+                    fixture_id: Number(fixtureId),
+                    game_number: g,
+                    team_side: side,
+                    player_slot: slot,
+                    player_id: row.player_id,
+                    scratch: 0,
+                    is_blind: 0
+                  })
+                }
+              })
             })
           })
-        })
-      }
-      setLines(seeded)
-      const fx=fixtures.find(f=>String(f.id)===String(fixtureId))
-      setAbsent({left:!!fx?.left_side_absent,right:!!fx?.right_side_absent})
-      console.log('[participants]',{fixtureId,rows})
-    }).catch(err=>alert(err.message))
+        }
+        setLines(seeded)
+        const fx=fixtures.find(f=>String(f.id)===String(fixtureId))
+        setAbsent({left:!!fx?.left_side_absent,right:!!fx?.right_side_absent})
+        console.log('[participants]',{fixtureId,rows})
+      })
+      .catch(err=>{
+        console.error('participants error', err)
+        setParticipants({rows:[],match_day_id:null})
+        setLines([])
+        alert(err.message)
+      })
   },[fixtureId,fixtures])
 
   useEffect(()=>{

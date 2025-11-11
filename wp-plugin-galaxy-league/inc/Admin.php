@@ -11,21 +11,27 @@ class GLR_Admin {
 
   public static function admin_assets($hook) {
     if (strpos($hook,'glr-scores') !== false) {
-      wp_enqueue_script('glr-admin', GLR_URL.'assets/dist/assets/admin.js', [], GLR_VER, true);
+      $file = GLR_DIR.'assets/dist/assets/admin.js';
+      $ver = file_exists($file) ? filemtime($file) : GLR_VER;
+      wp_enqueue_script('glr-admin', GLR_URL.'assets/dist/assets/admin.js', ['wp-element'], $ver, true);
       wp_localize_script('glr-admin','GLR',[
         'rest'=>esc_url_raw( rest_url('glr/v1/') ),
         'nonce'=>wp_create_nonce('wp_rest')
       ]);
     }
     if (strpos($hook,'glr-manage') !== false) {
-      wp_enqueue_script('glr-admin-manage', GLR_URL.'assets/dist/assets/admin-manage.js', [], GLR_VER, true);
+      $file = GLR_DIR.'assets/dist/assets/admin-manage.js';
+      $ver = file_exists($file) ? filemtime($file) : GLR_VER;
+      wp_enqueue_script('glr-admin-manage', GLR_URL.'assets/dist/assets/admin-manage.js', ['wp-element'], $ver, true);
       wp_localize_script('glr-admin-manage','GLR',[
         'rest'=>esc_url_raw( rest_url('glr/v1/') ),
         'nonce'=>wp_create_nonce('wp_rest')
       ]);
     }
     if (strpos($hook,'glr-setup') !== false) {
-      wp_enqueue_script('glr-admin-setup', GLR_URL.'assets/dist/assets/admin-setup.js', [], GLR_VER, true);
+      $file = GLR_DIR.'assets/dist/assets/admin-setup.js';
+      $ver = file_exists($file) ? filemtime($file) : GLR_VER;
+      wp_enqueue_script('glr-admin-setup', GLR_URL.'assets/dist/assets/admin-setup.js', ['wp-element'], $ver, true);
       wp_localize_script('glr-admin-setup','GLR',[
         'rest'=>esc_url_raw( rest_url('glr/v1/') ),
         'nonce'=>wp_create_nonce('wp_rest')
