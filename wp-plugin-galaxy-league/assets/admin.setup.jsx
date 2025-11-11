@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 const api = async (path, opt = {}) => {
   const res = await fetch(GLR.rest + path, {
     headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
+    credentials: 'same-origin',
     ...opt
   })
   const text = await res.text()
@@ -400,6 +401,12 @@ function StepOrder({ onDone }) {
       return
     }
     try {
+      console.log('POST Fix:', {
+        match_day_id: Number(matchDayId),
+        lane_id: form.lane_id !== '' ? Number(form.lane_id) : null,
+        left_team_id: Number(form.left_team_id),
+        right_team_id: Number(form.right_team_id)
+      })
       await api('fixtures', {
         method: 'POST',
         body: JSON.stringify({

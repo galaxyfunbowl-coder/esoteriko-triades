@@ -44,6 +44,58 @@ class GLR_Api {
     register_rest_route('glr/v1','/player-order',['methods'=>'POST','callback'=>['GLR_Api','order_set'],'permission_callback'=>function(){return current_user_can('manage_options');}]);
     register_rest_route('glr/v1','/hc/list',['methods'=>'GET','callback'=>['GLR_Api','hc_list'],'permission_callback'=>function(){return current_user_can('manage_options');}]);
     register_rest_route('glr/v1','/hc/save',['methods'=>'POST','callback'=>['GLR_Api','hc_save'],'permission_callback'=>function(){return current_user_can('manage_options');}]);
+
+    register_rest_route('glr/v1','/health',[
+      'methods'=>'GET',
+      'callback'=>['GLR_Api','health'],
+      'permission_callback'=>function(){return current_user_can('manage_options');}
+    ]);
+    register_rest_route('glr/v1','/debug/seed-season',[
+      'methods'=>'POST',
+      'callback'=>['GLR_Api','debug_seed_season'],
+      'permission_callback'=>function(){return current_user_can('manage_options');}
+    ]);
+    register_rest_route('glr/v1','/debug/seed-matchday',[
+      'methods'=>'POST',
+      'callback'=>['GLR_Api','debug_seed_md'],
+      'permission_callback'=>function(){return current_user_can('manage_options');}
+    ]);
+  }
+
+  public static function health() {
+    try {
+      $pdo = GLR_DB::pdo();
+      $db = $pdo->query('SELECT DATABASE()')->fetchColumn();
+      $tables = $pdo->query('SHOW TABLES')->fetchAll(\PDO::FETCH_COLUMN);
+      return ['ok'=>true,'database'=>$db,'tables'=>$tables];
+    } catch (\Throwable $e) {
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
+    }
+  }
+
+  public static function debug_seed_season(\WP_REST_Request $r){
+    try{
+      $pdo = GLR_DB::pdo();
+      $st = $pdo->prepare('INSERT INTO seasons(name,year,total_match_days) VALUES (?,?,?)');
+      $st->execute(['DEBUG Season',2025,7]);
+      return ['ok'=>true,'id'=>(int)$pdo->lastInsertId()];
+    }catch(\Throwable $e){
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
+    }
+  }
+
+  public static function debug_seed_md(\WP_REST_Request $r){
+    try{
+      $b = $r->get_json_params();
+      $season_id = (int)($b['season_id']??0);
+      if(!$season_id) throw new \Exception('season_id required');
+      $pdo = GLR_DB::pdo();
+      $st = $pdo->prepare('INSERT INTO match_days(season_id,idx,label,date,type) VALUES (?,?,?,?,?)');
+      $st->execute([$season_id,1,'1η Αγωνιστική','2025-09-01','regular']);
+      return ['ok'=>true,'id'=>(int)$pdo->lastInsertId()];
+    }catch(\Throwable $e){
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
+    }
   }
 
   public static function seasons() {
@@ -396,39 +448,47 @@ class GLR_Api {
   }
 
   public static function seasons_upsert(\WP_REST_Request $req){
-    $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
-    $name = isset($b['name']) ? trim($b['name']) : '';
-    $year = (int)($b['year']??0);
-    $total = (int)($b['total_match_days']??0);
-    if($name===''||!$year||!$total) throw new Exception('name/year/total required');
-    if ($id) {
-      $st=$pdo->prepare('UPDATE seasons SET name=?, year=?, total_match_days=? WHERE id=?');
-      $st->execute([$name,$year,$total,$id]);
-    } else {
-      $st=$pdo->prepare('INSERT INTO seasons(name,year,total_match_days) VALUES (?,?,?)');
-      $st->execute([$name,$year,$total]);
-      $id=(int)$pdo->lastInsertId();
+    try{
+      $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
+      $name = isset($b['name']) ? trim($b['name']) : '';
+      $year = (int)($b['year']??0);
+      $total = (int)($b['total_match_days']??0);
+      if($name===''||!$year||!$total) throw new Exception('name/year/total required');
+      if ($id) {
+        $st=$pdo->prepare('UPDATE seasons SET name=?, year=?, total_match_days=? WHERE id=?');
+        $st->execute([$name,$year,$total,$id]);
+      } else {
+        $st=$pdo->prepare('INSERT INTO seasons(name,year,total_match_days) VALUES (?,?,?)');
+        $st->execute([$name,$year,$total]);
+        $id=(int)$pdo->lastInsertId();
+      }
+      return ['ok'=>true,'id'=>$id];
+    }catch(\Throwable $e){
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
     }
-    return ['ok'=>true,'id'=>$id];
   }
 
   public static function match_days_upsert(\WP_REST_Request $req){
-    $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
-    $season_id=(int)($b['season_id']??0);
-    $idx=(int)($b['idx']??0);
-    $label=$b['label']??null;
-    $date=$b['date']??null;
-    $type=$b['type']??'regular';
-    if(!$season_id||!$idx) throw new Exception('season_id/idx required');
-    if ($id) {
-      $st=$pdo->prepare('UPDATE match_days SET season_id=?, idx=?, label=?, date=?, type=? WHERE id=?');
-      $st->execute([$season_id,$idx,$label,$date,$type?:'regular',$id]);
-    } else {
-      $st=$pdo->prepare('INSERT INTO match_days(season_id,idx,label,date,type) VALUES (?,?,?,?,?)');
-      $st->execute([$season_id,$idx,$label,$date,$type?:'regular']);
-      $id=(int)$pdo->lastInsertId();
+    try{
+      $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
+      $season_id=(int)($b['season_id']??0);
+      $idx=(int)($b['idx']??0);
+      $label=$b['label']??null;
+      $date=$b['date']??null;
+      $type=$b['type']??'regular';
+      if(!$season_id||!$idx) throw new Exception('season_id/idx required');
+      if ($id) {
+        $st=$pdo->prepare('UPDATE match_days SET season_id=?, idx=?, label=?, date=?, type=? WHERE id=?');
+        $st->execute([$season_id,$idx,$label,$date,$type?:'regular',$id]);
+      } else {
+        $st=$pdo->prepare('INSERT INTO match_days(season_id,idx,label,date,type) VALUES (?,?,?,?,?)');
+        $st->execute([$season_id,$idx,$label,$date,$type?:'regular']);
+        $id=(int)$pdo->lastInsertId();
+      }
+      return ['ok'=>true,'id'=>$id];
+    }catch(\Throwable $e){
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
     }
-    return ['ok'=>true,'id'=>$id];
   }
 
   public static function match_days_delete(\WP_REST_Request $req){
@@ -450,36 +510,40 @@ class GLR_Api {
   }
 
   public static function fixtures_upsert(\WP_REST_Request $req){
-    $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
-    $match_day_id = (int)($b['match_day_id']??0);
-    $lane_id = isset($b['lane_id']) && $b['lane_id'] !== '' ? (int)$b['lane_id'] : null;
-    $left_team_id = (int)($b['left_team_id']??0);
-    $right_team_id = (int)($b['right_team_id']??0);
-    if(!$match_day_id||!$left_team_id||!$right_team_id) throw new Exception('fixture fields missing');
-    $check=$pdo->prepare('SELECT COUNT(*) FROM match_days WHERE id=?');
-    $check->execute([$match_day_id]);
-    if(!$check->fetchColumn()) throw new Exception('Το match day δεν υπάρχει. Βεβαιώσου ότι έχεις ολοκληρώσει το Setup (Step 1).');
-    $teamsCheck=$pdo->prepare('SELECT id FROM teams WHERE id IN (?,?)');
-    $teamsCheck->execute([$left_team_id,$right_team_id]);
-    $found=$teamsCheck->fetchAll(\PDO::FETCH_COLUMN);
-    if(!in_array($left_team_id,$found,true) || !in_array($right_team_id,$found,true)) throw new Exception('Μία από τις ομάδες δεν υπάρχει πλέον.');
-    if ($id) {
-      $st=$pdo->prepare('UPDATE fixtures SET match_day_id=?, lane_id=?, left_team_id=?, right_team_id=? WHERE id=?');
-      try {
-        $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id,$id]);
-      } catch(\PDOException $e) {
-        throw new Exception('Αδυναμία ενημέρωσης fixture: '.$e->getMessage());
+    try{
+      $pdo=GLR_DB::pdo(); $b=$req->get_json_params(); $id=(int)($b['id']??0);
+      $match_day_id = (int)($b['match_day_id']??0);
+      $lane_id = isset($b['lane_id']) && $b['lane_id'] !== '' ? (int)$b['lane_id'] : null;
+      $left_team_id = (int)($b['left_team_id']??0);
+      $right_team_id = (int)($b['right_team_id']??0);
+      if(!$match_day_id||!$left_team_id||!$right_team_id) throw new Exception('fixture fields missing');
+      $check=$pdo->prepare('SELECT COUNT(*) FROM match_days WHERE id=?');
+      $check->execute([$match_day_id]);
+      if(!$check->fetchColumn()) throw new Exception('Το match day δεν υπάρχει. Βεβαιώσου ότι έχεις ολοκληρώσει το Setup (Step 1).');
+      $teamsCheck=$pdo->prepare('SELECT id FROM teams WHERE id IN (?,?)');
+      $teamsCheck->execute([$left_team_id,$right_team_id]);
+      $found=$teamsCheck->fetchAll(\PDO::FETCH_COLUMN);
+      if(!in_array($left_team_id,$found,true) || !in_array($right_team_id,$found,true)) throw new Exception('Μία από τις ομάδες δεν υπάρχει πλέον.');
+      if ($id) {
+        $st=$pdo->prepare('UPDATE fixtures SET match_day_id=?, lane_id=?, left_team_id=?, right_team_id=? WHERE id=?');
+        try {
+          $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id,$id]);
+        } catch(\PDOException $e) {
+          throw new Exception('Αδυναμία ενημέρωσης fixture: '.$e->getMessage());
+        }
+      } else {
+        $st=$pdo->prepare('INSERT INTO fixtures(match_day_id,lane_id,left_team_id,right_team_id) VALUES (?,?,?,?)');
+        try {
+          $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id]);
+          $id=(int)$pdo->lastInsertId();
+        } catch(\PDOException $e) {
+          throw new Exception('Αδυναμία δημιουργίας fixture: '.$e->getMessage());
+        }
       }
-    } else {
-      $st=$pdo->prepare('INSERT INTO fixtures(match_day_id,lane_id,left_team_id,right_team_id) VALUES (?,?,?,?)');
-      try {
-        $st->execute([$match_day_id,$lane_id,$left_team_id,$right_team_id]);
-        $id=(int)$pdo->lastInsertId();
-      } catch(\PDOException $e) {
-        throw new Exception('Αδυναμία δημιουργίας fixture: '.$e->getMessage());
-      }
+      return ['ok'=>true,'id'=>$id];
+    }catch(\Throwable $e){
+      return new \WP_REST_Response(['ok'=>false,'error'=>$e->getMessage()],500);
     }
-    return ['ok'=>true,'id'=>$id];
   }
 
   public static function order_get(\WP_REST_Request $req){
