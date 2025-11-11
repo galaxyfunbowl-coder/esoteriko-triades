@@ -3,21 +3,24 @@ import { createRoot } from 'react-dom/client'
 
 const api = async (path, opt = {}) => {
   const res = await fetch(GLR.rest + path, {
-    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
     credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': GLR.nonce },
     ...opt
   })
   const text = await res.text()
-  let data
+  let data = {}
   try {
     data = text ? JSON.parse(text) : {}
   } catch (err) {
-    throw new Error(`HTTP ${res.status}`)
+    console.error('Bad JSON for', path, text)
+    throw err
   }
   if (!res.ok || data?.ok === false || data?.success === false) {
-    const msg = data?.error || data?.message || data?.data?.message
-    throw new Error(msg || `HTTP ${res.status}`)
+    const msg = data?.error || data?.message || data?.data?.message || `HTTP ${res.status}`
+    throw new Error(msg)
   }
+  if (Array.isArray(data)) data = { rows: data }
+  if (data.rows === undefined) data.rows = []
   return data
 }
 
@@ -33,18 +36,50 @@ function ScoresApp(){
   const [pending,setPending]=useState([])
   const [absent,setAbsent]=useState({left:false,right:false})
 
-  useEffect(()=>{ api('seasons').then(j=>setSeasons(j.rows||[])).catch(err=>alert(err.message)) },[])
-  useEffect(()=>{ if(!seasonId) return; api(`match-days?season_id=${seasonId}`).then(j=>setMatchDays(j.rows||[])).catch(err=>alert(err.message)) },[seasonId])
-  useEffect(()=>{ if(!matchDayId) return; api(`fixtures?match_day_id=${matchDayId}`).then(j=>setFixtures(j.rows||[])).catch(err=>alert(err.message)) },[matchDayId])
+  useEffect(()=>{
+    api('seasons')
+      .then(res=>setSeasons(res?.rows || []))
+      .catch(err=>alert(err.message))
+  },[])
+
+  useEffect(()=>{
+    if (!seasonId) {
+      setMatchDays([])
+      setMatchDayId('')
+      setFixtures([])
+      setFixtureId('')
+      return
+    }
+    setMatchDayId('')
+    setFixtures([])
+    setFixtureId('')
+    api(`match-days?season_id=${seasonId}`)
+      .then(res=>setMatchDays(res?.rows || []))
+      .catch(err=>alert(err.message))
+  },[seasonId])
+
+  useEffect(()=>{
+    if(!matchDayId) {
+      setFixtures([])
+      setFixtureId('')
+      return
+    }
+    api(`fixtures?match_day_id=${Number(matchDayId)}`)
+      .then(res=>{
+        const rows = res?.rows || []
+        setFixtures(rows)
+        console.log('[fixtures]', rows)
+      })
+      .catch(err=>alert(err.message))
+    setFixtureId('')
+  },[matchDayId])
 
   useEffect(()=>{
     if(!fixtureId) return
-    api(`participants?fixture_id=${fixtureId}`).then(j=>{
-      const rows = Array.isArray(j.rows) ? j.rows : []
-      setParticipants({
-        rows,
-        match_day_id: j.match_day_id ? Number(j.match_day_id) : null
-      })
+    api(`participants?fixture_id=${fixtureId}`).then(res=>{
+      const rows = res?.rows || []
+      const mdId = res?.match_day_id ? Number(res.match_day_id) : null
+      setParticipants({rows,match_day_id:mdId})
       const seeded=[]
       if(rows.length){
         [1,2,3].forEach(g=>{
@@ -69,6 +104,7 @@ function ScoresApp(){
       setLines(seeded)
       const fx=fixtures.find(f=>String(f.id)===String(fixtureId))
       setAbsent({left:!!fx?.left_side_absent,right:!!fx?.right_side_absent})
+      console.log('[participants]',{fixtureId,rows})
     }).catch(err=>alert(err.message))
   },[fixtureId,fixtures])
 
@@ -121,9 +157,9 @@ function ScoresApp(){
         </div>
       )}
 
-      {fixtureId && participants.rows?.length===0 && (
+      {fixtureId && (participants.rows?.length || 0) === 0 && (
         <div style={{margin:'16px 0',padding:12,border:'1px solid #f0ad4e',borderRadius:8,background:'#fff8e5'}}>
-          Δεν βρέθηκαν παίκτες για το fixture. Έλεγξε ότι έχεις αποθηκεύσει τη σειρά παικτών στο Setup → Order 1ης.
+          Δεν βρέθηκαν παίκτες για το fixture. Ορίστε σειρά στο Setup → Order 1ης.
         </div>
       )}
 
