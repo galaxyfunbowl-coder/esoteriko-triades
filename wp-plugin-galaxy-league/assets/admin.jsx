@@ -40,12 +40,32 @@ function ScoresApp(){
   useEffect(()=>{
     if(!fixtureId) return
     api(`participants?fixture_id=${fixtureId}`).then(j=>{
-      setParticipants(j)
+      const rows = Array.isArray(j.rows) ? j.rows : []
+      setParticipants({
+        rows,
+        match_day_id: j.match_day_id ? Number(j.match_day_id) : null
+      })
       const seeded=[]
-      ;[1,2,3].forEach(g=>['left','right'].forEach(side=>[1,2,3].forEach(slot=>{
-        const row=j.rows.find(r=>r.team_side===side && r.slot===slot)
-        if(row) seeded.push({fixture_id:Number(fixtureId),game_number:g,team_side:side,player_slot:slot,player_id:row.player_id,scratch:0,is_blind:0})
-      })))
+      if(rows.length){
+        [1,2,3].forEach(g=>{
+          ['left','right'].forEach(side=>{
+            [1,2,3].forEach(slot=>{
+              const row=rows.find(r=>r.team_side===side && r.slot===slot)
+              if(row){
+                seeded.push({
+                  fixture_id: Number(fixtureId),
+                  game_number: g,
+                  team_side: side,
+                  player_slot: slot,
+                  player_id: row.player_id,
+                  scratch: 0,
+                  is_blind: 0
+                })
+              }
+            })
+          })
+        })
+      }
       setLines(seeded)
       const fx=fixtures.find(f=>String(f.id)===String(fixtureId))
       setAbsent({left:!!fx?.left_side_absent,right:!!fx?.right_side_absent})
